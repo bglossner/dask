@@ -1050,8 +1050,7 @@ def test_reductions_non_numeric_dtypes():
     check_raises(dds, pds, "skew")
     check_raises(dds, pds, "kurtosis")
 
-    # ToDo: pandas supports timedelta std, dask returns float64
-    # assert_eq(dds.std(), pds.std())
+    assert_eq(dds.std(), pds.std())
 
     # ToDo: pandas supports timedelta std, otherwise dask raises:
     # TypeError: unsupported operand type(s) for *: 'float' and 'Timedelta'
@@ -1169,7 +1168,7 @@ def test_reductions_frame_dtypes():
 
     ddf = dd.from_pandas(df, 3)
 
-    # TODO: std and mean do not support timedelta dtype
+    # TODO: mean does not support timedelta dtype
     df_no_timedelta = df.drop("timedelta", axis=1, inplace=False)
     ddf_no_timedelta = dd.from_pandas(df_no_timedelta, 3)
 
@@ -1185,12 +1184,9 @@ def test_reductions_frame_dtypes():
     assert_eq(df.max(), ddf.max())
     assert_eq(df.count(), ddf.count())
     if PANDAS_GT_120:
-        # std is implemented for datetimes in pandas 1.2.0, but dask
-        # implementation depends on var which isn't
-        assert_eq(
-            df_no_timedelta.drop("dt", axis=1).std(),
-            ddf_no_timedelta.drop("dt", axis=1).std(),
-        )
+        # std is implemented for datetimes in pandas 1.2.0
+        assert_eq(df.std(), ddf.std())
+        assert_eq(df.std(skipna=False), ddf.std(skipna=False))
     else:
         assert_eq(df_no_timedelta.std(), ddf_no_timedelta.std())
     assert_eq(df_no_timedelta.var(), ddf_no_timedelta.var())
@@ -1201,10 +1197,7 @@ def test_reductions_frame_dtypes():
     assert_eq(df2.var(skipna=False), ddf2.var(skipna=False))
     assert_eq(df.sem(), ddf.sem())
     if PANDAS_GT_120:
-        assert_eq(
-            df_no_timedelta.drop("dt", axis=1).std(ddof=0),
-            ddf_no_timedelta.drop("dt", axis=1).std(ddof=0),
-        )
+        assert_eq(df.std(ddof=0), ddf.std(ddof=0))
     else:
         assert_eq(df_no_timedelta.std(ddof=0), ddf_no_timedelta.std(ddof=0))
     assert_eq(df2.var(ddof=0), ddf2.var(ddof=0))

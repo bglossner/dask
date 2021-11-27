@@ -15,6 +15,7 @@ from pandas.api.types import (
     is_numeric_dtype,
     is_timedelta64_dtype,
 )
+from pandas.core.dtypes.common import is_datetime_or_timedelta_dtype
 from pandas.util import cache_readonly
 from tlz import first, merge, partition_all, remove, unique
 
@@ -2132,7 +2133,46 @@ Dask Name: {name}, {task} tasks"""
     ):
         axis = self._validate_axis(axis)
         _raise_if_object_series(self, "std")
+
         meta = self._meta_nonempty.std(axis=axis, skipna=skipna)
+        is_df_like = is_dataframe_like(self._meta_nonempty)
+
+        if PANDAS_GT_120:
+            if is_df_like:
+                time_cols = self._meta_nonempty.select_dtypes(
+                    include=["datetime", np.timedelta64]
+                ).columns
+                needs_time_conversion = len(time_cols) > 0
+            else:
+                needs_time_conversion = is_datetime_or_timedelta_dtype(
+                    self._meta_nonempty
+                )
+        else:
+            # Don't bother if pandas version is less than 1.2.0
+            needs_time_conversion = False
+
+        if needs_time_conversion:
+            from .io import from_pandas
+            from .numeric import to_numeric
+
+            def convert_to_numeric(s):
+                if skipna:
+                    return to_numeric(s.dropna())
+                elif numeric_dd[col].isnull().values.any():
+                    return from_pandas(pd.Series([np.nan]), npartitions=1)
+
+                return to_numeric(s)
+
+            if is_df_like:
+                numeric_dd = self[meta.index]
+                # Convert timedelta and datetime columns to integer types so we can use var
+                for col in time_cols:
+                    numeric_dd[col] = convert_to_numeric(numeric_dd[col])
+            else:
+                numeric_dd = convert_to_numeric(self)
+        else:
+            numeric_dd = self
+
         if axis == 1:
             result = map_partitions(
                 M.std,
@@ -2147,10 +2187,23 @@ Dask Name: {name}, {task} tasks"""
             )
             return handle_out(out, result)
         else:
-            v = self.var(skipna=skipna, ddof=ddof, split_every=split_every)
+            v = numeric_dd.var(skipna=skipna, ddof=ddof, split_every=split_every)
             name = self._token_prefix + "std"
+
+            def sqrt_and_convert(p):
+                sqrt = np.sqrt(p)
+
+                if not is_df_like:
+                    return pd.to_timedelta(sqrt)
+
+                time_col_mask = sqrt.index.isin(time_cols)
+                matching_vals = sqrt[time_col_mask]
+                sqrt.loc[time_col_mask] = pd.to_timedelta(matching_vals)
+
+                return sqrt
+
             result = map_partitions(
-                np.sqrt,
+                np.sqrt if not needs_time_conversion else sqrt_and_convert,
                 v,
                 meta=meta,
                 token=name,
