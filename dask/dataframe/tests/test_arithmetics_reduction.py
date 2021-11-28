@@ -1185,12 +1185,8 @@ def test_reductions_frame_dtypes():
     assert_eq(df.max(), ddf.max())
     assert_eq(df.count(), ddf.count())
     if PANDAS_GT_120:
-        # std is implemented for datetimes in pandas 1.2.0, but dask
-        # implementation depends on var which isn't
-        assert_eq(
-            df_no_timedelta.drop("dt", axis=1).std(),
-            ddf_no_timedelta.drop("dt", axis=1).std(),
-        )
+        assert_eq(df_no_timedelta.std(), ddf_no_timedelta.std())
+        assert_eq(df_no_timedelta.std(skipna=False), ddf_no_timedelta.std(skipna=False))
     else:
         assert_eq(df_no_timedelta.std(), ddf_no_timedelta.std())
     assert_eq(df_no_timedelta.var(), ddf_no_timedelta.var())
@@ -1202,8 +1198,8 @@ def test_reductions_frame_dtypes():
     assert_eq(df.sem(), ddf.sem())
     if PANDAS_GT_120:
         assert_eq(
-            df_no_timedelta.drop("dt", axis=1).std(ddof=0),
-            ddf_no_timedelta.drop("dt", axis=1).std(ddof=0),
+            df_no_timedelta.std(ddof=0),
+            ddf_no_timedelta.std(ddof=0),
         )
     else:
         assert_eq(df_no_timedelta.std(ddof=0), ddf_no_timedelta.std(ddof=0))
